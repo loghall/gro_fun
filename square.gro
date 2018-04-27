@@ -1,0 +1,199 @@
+////////////////////////////////////////////////////////////////////////////
+// 
+//   gro 
+// 
+//   Copyright (c) 2011-2012 Eric Klavins, University of Washington
+//   For more information, email klavins@uw.edu
+// 
+//   This program is free software; you can redistribute it and/or
+//   modify it under the terms of the GNU General Public License
+//   as published by the Free Software Foundation; either version 2
+//   of the License, or (at your option) any later version.
+// 
+//   This program is distributed in the hope that it will be useful,
+//   but WITHOUT ANY WARRANTY; without even the implied warranty of
+//   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+//   GNU General Public License for more details.
+// 
+//   You should have received a copy of the GNU General Public License
+//   along with this program; if not, write to the Free Software
+//   Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
+// 
+// 
+
+include gro
+
+dt := 0.075;
+set ( "dt", dt );
+leaderSig := signal ( 1, 1 );
+controlSig := signal(1, 0.1);
+
+
+LEADER := 0;
+FOLLOWER := 1;
+ELECTION := 2;
+CANDIDATE := 3;
+VOTER := 4;
+
+
+
+timePeriod := 7;
+mag := 10;
+
+
+program leaderElection(cond, leaderSignal, controlSignal) := {
+
+	r := [ state := ELECTION,  t := 0.0 ];
+	candidate := [ t := 0 , txCount := 0];
+	follower := [ leaderSignalCount := 0];
+	
+	
+	rfp := 0;
+	gfp := 0;
+	count := 0;
+
+	cond : {
+	
+		skip();
+	}
+	
+	//if follower and no signal received from
+	//leader, go into election mode to select
+	//new leader
+	
+	r.state = FOLLOWER & 
+	get_signal(leaderSig) > 0.1 & 
+	r.t > (timePeriod - 1) : {
+	
+		r.t := 0,
+		emit_signal ( leaderSig, 100 ),
+		gfp := gfp + 10;
+		follower.leaderSignalCount := follower.leaderSignalCount + 1;
+	}
+	
+	
+	r.state = FOLLOWER & r.t > 3*timePeriod : {
+		
+		r.state := ELECTION,
+		r.t := 0
+	
+	}
+	
+	
+	r.state = FOLLOWER & r.t > 2*timePeriod : {
+		
+		follower.leaderSignalCount := 0;
+	}
+	
+	
+	r.state = FOLLOWER & follower.leaderSignalCount > 3 & 
+	get_signal(controlSignal) < 0.1  : {
+		
+		die();
+	
+	}
+	
+	r.state = FOLLOWER & get_signal(controlSignal) > 1
+	& get_signal(controlSignal) < 2 : {
+	
+		gfp := gfp - 10;
+		rfp := rfp + 10;
+		
+	}
+	
+
+	//if in election mode and get signal from candidate
+	//you lost :p
+	//Set yourself as the follower.
+	r.state = ELECTION & get_signal(leaderSig) > 0.1: 
+	{
+		r.state := FOLLOWER,
+		gfp := 10
+	}
+
+
+	//set yourself as candidate for leader
+	r.state = ELECTION & r.t > timePeriod & rate(0.001) : { 
+		
+		emit_signal ( leaderSig, 100 ),
+		r.t := 0,
+		r.state := CANDIDATE,
+		rfp := 100,
+		candidate.t := 0,
+		candidate.txCount := 0,
+	}
+
+	
+	r.state = CANDIDATE & rate(0.03) : {
+	
+		emit_signal( leaderSig, 100 ),
+		r.t := 0,
+		rfp := 100,
+		candidate.txCount := candidate.txCount + 1,
+	}
+	
+	r.state = CANDIDATE & r.t > timePeriod & get_signal( leaderSig ) > 0.01 :
+	{
+		r.state := FOLLOWER,
+		rfp := 0,
+		gfp := 10
+	}
+	
+	r.state = CANDIDATE & candidate.txCount >= 3 : {
+	
+		r.state := LEADER	
+	}
+	
+	just_divided & daughter : {
+	
+		r.state := FOLLOWER,
+		rfp := 0,
+		gfp := 10,
+	}
+	
+	r.state = LEADER & r.t > timePeriod : {
+	
+		emit_signal(leaderSig, 100);
+		r.t := 0;
+		rfp := 1000;
+		gfp := 1000;
+	}
+	
+	r.state = LEADER : {
+	
+		emit_signal(controlSignal, 200);
+	
+	}
+	
+	r.state = LEADER & r.t > (timePeriod - 2) & get_signal(leaderSig) > 0.1: {
+		
+		r.state := CANDIDATE,
+		rfp := 1000;
+		gfp := 0;
+	}
+
+		
+	selected : {
+		
+		message(1, "state=" <> tostring(r.state)
+			<> "candidate time=" <> tostring(candidate.t)
+			<> "Leader signal count=" <> tostring(follower.leaderSignalCount)
+		)
+	
+	}
+
+
+	true : { 
+		r.t := r.t + dt,
+		candidate.t := candidate.t + dt
+	}
+
+};
+
+foreach q in range 1 do
+
+ecoli ( [x:=0 , y:=0], program leaderElection(true, leaderSig, controlSig) )
+
+end;
+
+
