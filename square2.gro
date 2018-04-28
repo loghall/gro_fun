@@ -7,8 +7,8 @@ set("dt", 0.1);
 globalLeaderSignal := signal(1, 1);
 globalControlSignal := signal(1, 0.1);
 
-cornerLeaderSignal := signal(1, 1);
-cornerControlSignal := signal(1, 0.1);
+cornerLeaderSignal := signal(1, 0.8);
+cornerControlSignal := signal(1, 0.01);
 
 timePeriod := 7;
 
@@ -34,7 +34,7 @@ program globalLeader(sig, controlSig) := {
 	
 	t > timePeriod : {
 		
-		emit_signal(sig, 100);
+		//emit_signal(sig, 100);
 		t := 0;
 	}
 	
@@ -54,6 +54,7 @@ program globalFollower(sig, controlSig) := {
 	
 	set("ecoli_growth_rate", 0.00);
 	gfp := 0;
+	rfp := 0;
 	
 	true : { t := t + dt, t2 := t2 + dt}
 
@@ -66,13 +67,14 @@ program globalFollower(sig, controlSig) := {
 	
 	
 	get_signal(controlSig) > 0.3 & 
-	get_signal(controlSig) < 0.7 &
-	t2 > 15: {
+	get_signal(controlSig) < 0.9 &
+	t2 > 30 &
+	r.state = IDLE : {
 		gfp := 1000;
 		r.state := ELECTION;
 	}
 	
-	get_signal(controlSig) < 0.3 | get_signal(controlSig) > 0.7 : {
+	get_signal(controlSig) < 0.3 | get_signal(controlSig) > 0.9 : {
 		gfp := 0;
 		r.state := IDLE;
 		t2 := 0;
@@ -80,10 +82,13 @@ program globalFollower(sig, controlSig) := {
 		
 };
 
+mag2 := 100;
+
 program leaderElection2(initialState, leaderSig, controlSig) := {
 
 	needs r;
 	needs gfp;
+	needs rfp;
 	candidate := [ t := 0 , txCount := 0];
 	follower := [ substate := CANDIDATE, leaderSignalCount := 0];
 	state := 9;
@@ -101,7 +106,7 @@ program leaderElection2(initialState, leaderSig, controlSig) := {
 	r.t > timePeriod : {
 	
 		r.t := 0,
-		emit_signal ( leaderSig, 100 ),
+		emit_signal ( leaderSig, mag2 ),
 		follower.leaderSignalCount := follower.leaderSignalCount + 1;
 	
 	}
@@ -130,9 +135,9 @@ program leaderElection2(initialState, leaderSig, controlSig) := {
 
 
 	//set yourself as candidate for leader
-	r.state = ELECTION & r.t > timePeriod & rate(0.001) : { 
+	r.state = ELECTION & r.t > timePeriod & rate(0.1) : { 
 		
-		emit_signal ( leaderSig, 100 ),
+		emit_signal ( leaderSig, mag2 ),
 		r.t := 0,
 		r.state := CANDIDATE,
 		candidate.t := 0,
@@ -142,7 +147,7 @@ program leaderElection2(initialState, leaderSig, controlSig) := {
 	
 	r.state = CANDIDATE & rate(0.03) : {
 	
-		emit_signal( leaderSig, 100 ),
+		emit_signal( leaderSig, mag2 ),
 		r.t := 0,
 		candidate.txCount := candidate.txCount + 1,
 	}
@@ -157,13 +162,23 @@ program leaderElection2(initialState, leaderSig, controlSig) := {
 		r.state := LEADER	
 	}
 	
+	r.state = LEADER : {
+	
+		rfp := 1000;
+		emit_signal(controlSig, 300);
+	}
+	
+	r.state != LEADER : {
+		rfp := 0;
+	}
 	
 	r.state = LEADER & r.t > timePeriod : {
 	
-		emit_signal(leaderSig, 100);
+		emit_signal(leaderSig, mag2);
 		r.t := 0;
 	}
 
+	
 	
 	r.state = LEADER & r.t > (timePeriod - 1) & get_signal(leaderSig) > 0.1: {
 		
@@ -175,6 +190,7 @@ program leaderElection2(initialState, leaderSig, controlSig) := {
 	selected : {
 		
 		message(1, "state=" <> tostring(r.state)
+			<>   ", time="  <> tostring(r.t)
 		)
 	}
 
@@ -187,7 +203,7 @@ program leaderElection2(initialState, leaderSig, controlSig) := {
 };
 
 program p() := globalFollower(globalLeaderSignal, globalControlSignal) + 
-				leaderElection2(IDLE, cornerLeaderSignal, cornerControlSignal) sharing r, gfp;
+				leaderElection2(IDLE, cornerLeaderSignal, cornerControlSignal) sharing r, gfp, rfp;
 
 
 foreach q in range 400 do
