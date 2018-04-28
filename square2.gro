@@ -10,8 +10,11 @@ globalControlSignal := signal(1, 0.1);
 cornerLeaderSignal := signal(1, 0.8);
 cornerControlSignal := signal(1, 0.05);
 
-timePeriod := 7;
 
+cornerControlSignal2 := signal(1, 0.05);
+
+timePeriod := 7;
+timeToStabilize := 50;
 
 LEADER := 0;
 FOLLOWER := 1;
@@ -19,6 +22,7 @@ ELECTION := 2;
 CANDIDATE := 3;
 VOTER := 4;
 IDLE := 5;
+
 
 
 program globalLeader(sig, controlSig) := {
@@ -68,7 +72,7 @@ program globalFollower(sig, controlSig) := {
 	
 	get_signal(controlSig) > 0.3 & 
 	get_signal(controlSig) < 0.9 &
-	t2 > 30 &
+	t2 > timeToStabilize &
 	r.state = IDLE : {
 		gfp := 1000;
 		r.state := ELECTION;
@@ -195,13 +199,7 @@ program leaderElection2(initialState, leaderSig, controlSig) := {
 	}
 
 
-			
-	selected : {
-		
-		message(1, "state=" <> tostring(r.state)
-			<>   ", time="  <> tostring(r.t)
-		)
-	}
+
 
 	true : { 
 		r.t := r.t + dt,
@@ -217,36 +215,98 @@ program corners23(controlSig1, controlSig2) := {
 	needs rfp;
 	needs gfp;
 	
+	t := 0;
+	
+	true : { t :=  t + dt }
+	
 	r.state != IDLE & 
+	r.state != LEADER &
 	get_signal(controlSig2) > 0.3 & 
-	get_signal(controlSig2) < 0.6 : {
+	get_signal(controlSig2) < 0.6 & 
+	t > timeToStabilize: {
 		
 		rfp := 1000;
 		gfp := 0;
+		emit_signal(controlSig1, 300);
 	}
 	
 	r.state != IDLE &
+	r.state != LEADER &
 	get_signal(controlSig2) < 0.3 : {
 		rfp := 0;
 		gfp := 1000;
+		t  := 0;
 	}
 	
 	r.state != IDLE &
+	r.state != LEADER &
 	get_signal(controlSig2) > 0.6 : {
 	
 		rfp := 0;
 		gfp := 1000;
+		t := 0;
 	}
+	
+};
 
+
+
+program corner5(controlSig1, controlSig2) := {
+
+	needs r;
+	needs rfp;
+	needs gfp;
+	
+	t := 0;
+	
+	true : { t :=  t + dt }
+	
+	r.state != IDLE & 
+	r.state != LEADER &
+	get_signal(controlSig2) > 3.0 & 
+	get_signal(controlSig2) < 4.5 : {
+		
+		rfp := 1000;
+		gfp := 0;
+		//emit_signal(controlSig1, 300);
+	}
+	
+	r.state != IDLE &
+	r.state != LEADER &
+	get_signal(controlSig2) < 3.0 : {
+		rfp := 0;
+		gfp := 1000;
+		t  := 0;
+	}
+	
+	r.state != IDLE &
+	r.state != LEADER &
+	get_signal(controlSig2) > 4.5 : {
+	
+		rfp := 0;
+		gfp := 1000;
+		t := 0;
+	}
+	
+				
+	selected : {
+		
+		message(1, "signal=" <> tostring(get_signal(controlSig2)));
+		
+	}
+	
 };
 
 program p() := globalFollower(globalLeaderSignal, globalControlSignal) + 
 				leaderElection2(IDLE, cornerLeaderSignal, cornerControlSignal) sharing r, gfp, rfp;
 
-program q() := p() + corners23(globalControlSignal, cornerControlSignal) sharing r, gfp, rfp;
+program q() := p() + corners23(cornerControlSignal2, cornerControlSignal) sharing r, gfp, rfp;
+
+program r() := q() + corner5(cornerControlSignal2, cornerControlSignal2) sharing r, gfp, rfp;
+
 
 foreach q in range 400 do
- 	ecoli ( [x:=0, y:=10], program q())
+ 	ecoli ( [x:=0, y:=10], program r())
 end;	
 
 
