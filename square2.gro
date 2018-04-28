@@ -8,7 +8,7 @@ globalLeaderSignal := signal(1, 1);
 globalControlSignal := signal(1, 0.1);
 
 cornerLeaderSignal := signal(1, 0.8);
-cornerControlSignal := signal(1, 0.01);
+cornerControlSignal := signal(1, 0.05);
 
 timePeriod := 7;
 
@@ -91,6 +91,7 @@ program leaderElection2(initialState, leaderSig, controlSig) := {
 	needs rfp;
 	candidate := [ t := 0 , txCount := 0];
 	follower := [ substate := CANDIDATE, leaderSignalCount := 0];
+	leader  := [t:=0];
 	state := 9;
 	
 	count := 0;
@@ -164,12 +165,20 @@ program leaderElection2(initialState, leaderSig, controlSig) := {
 	
 	r.state = LEADER : {
 	
+		leader.t := leader.t + dt;
 		rfp := 1000;
+	}
+	
+	r.state = LEADER & leader.t > 2*timePeriod: {
+	
+		
 		emit_signal(controlSig, 300);
+		
 	}
 	
 	r.state != LEADER : {
 		rfp := 0;
+		leader.t := 0;
 	}
 	
 	r.state = LEADER & r.t > timePeriod : {
@@ -196,18 +205,48 @@ program leaderElection2(initialState, leaderSig, controlSig) := {
 
 	true : { 
 		r.t := r.t + dt,
-		candidate.t := candidate.t + dt
+		candidate.t := candidate.t + dt,
 	}
 	
+
+};
+
+program corners23(controlSig1, controlSig2) := {
+
+	needs r;
+	needs rfp;
+	needs gfp;
+	
+	r.state != IDLE & 
+	get_signal(controlSig2) > 0.3 & 
+	get_signal(controlSig2) < 0.6 : {
+		
+		rfp := 1000;
+		gfp := 0;
+	}
+	
+	r.state != IDLE &
+	get_signal(controlSig2) < 0.3 : {
+		rfp := 0;
+		gfp := 1000;
+	}
+	
+	r.state != IDLE &
+	get_signal(controlSig2) > 0.6 : {
+	
+		rfp := 0;
+		gfp := 1000;
+	}
 
 };
 
 program p() := globalFollower(globalLeaderSignal, globalControlSignal) + 
 				leaderElection2(IDLE, cornerLeaderSignal, cornerControlSignal) sharing r, gfp, rfp;
 
+program q() := p() + corners23(globalControlSignal, cornerControlSignal) sharing r, gfp, rfp;
 
 foreach q in range 400 do
- 	ecoli ( [x:=0, y:=10], program p())
+ 	ecoli ( [x:=0, y:=10], program q())
 end;	
 
 
