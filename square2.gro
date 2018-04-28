@@ -1,0 +1,198 @@
+
+
+include gro
+
+set("dt", 0.1);
+
+globalLeaderSignal := signal(1, 1);
+globalControlSignal := signal(1, 0.1);
+
+cornerLeaderSignal := signal(1, 1);
+cornerControlSignal := signal(1, 0.1);
+
+timePeriod := 7;
+
+
+LEADER := 0;
+FOLLOWER := 1;
+ELECTION := 2;
+CANDIDATE := 3;
+VOTER := 4;
+IDLE := 5;
+
+
+program globalLeader(sig, controlSig) := {
+
+
+	t := 0;
+	rfp := 1000;
+	
+	set("ecoli_growth_rate", 0.00);
+	
+	true : { t := t + dt, rfp := 1000 }
+	
+	
+	t > timePeriod : {
+		
+		emit_signal(sig, 100);
+		t := 0;
+	}
+	
+	true : {
+		
+		emit_signal(controlSig, 300);
+	
+	}
+
+};
+
+program globalFollower(sig, controlSig) := {
+
+	t := 0;
+	r := [ state := IDLE,  t := 0.0 ];
+	t2 := 0;
+	
+	set("ecoli_growth_rate", 0.00);
+	gfp := 0;
+	
+	true : { t := t + dt, t2 := t2 + dt}
+
+	t > timePeriod & get_signal(sig) > 0.1 : {
+		
+		emit_signal(sig, 100);
+		t := 0;
+	}
+
+	
+	
+	get_signal(controlSig) > 0.3 & 
+	get_signal(controlSig) < 0.7 &
+	t2 > 15: {
+		gfp := 1000;
+		r.state := ELECTION;
+	}
+	
+	get_signal(controlSig) < 0.3 | get_signal(controlSig) > 0.7 : {
+		gfp := 0;
+		r.state := IDLE;
+		t2 := 0;
+	}
+		
+};
+
+program leaderElection2(initialState, leaderSig, controlSig) := {
+
+	needs r;
+	needs gfp;
+	candidate := [ t := 0 , txCount := 0];
+	follower := [ substate := CANDIDATE, leaderSignalCount := 0];
+	state := 9;
+	
+	count := 0;
+
+	//if follower and no signal received from
+	//leader, go into election mode to select
+	//new leader
+
+
+	
+	r.state = FOLLOWER & 
+	get_signal(leaderSig) > 0.1 & 
+	r.t > timePeriod : {
+	
+		r.t := 0,
+		emit_signal ( leaderSig, 100 ),
+		follower.leaderSignalCount := follower.leaderSignalCount + 1;
+	
+	}
+	
+	
+	r.state = FOLLOWER & r.t > 3*timePeriod : {
+		
+		r.state := ELECTION,
+		r.t := 0
+	
+	}
+	
+	
+	r.state = FOLLOWER & r.t > 2*timePeriod : {
+		
+		follower.leaderSignalCount := 0;
+	}
+	
+	//if in election mode and get signal from candidate
+	//you lost :p
+	//Set yourself as the follower.
+	r.state = ELECTION & get_signal(leaderSig) > 0.1: 
+	{
+		r.state := FOLLOWER,
+	}
+
+
+	//set yourself as candidate for leader
+	r.state = ELECTION & r.t > timePeriod & rate(0.001) : { 
+		
+		emit_signal ( leaderSig, 100 ),
+		r.t := 0,
+		r.state := CANDIDATE,
+		candidate.t := 0,
+		candidate.txCount := 0,
+	}
+
+	
+	r.state = CANDIDATE & rate(0.03) : {
+	
+		emit_signal( leaderSig, 100 ),
+		r.t := 0,
+		candidate.txCount := candidate.txCount + 1,
+	}
+	
+	r.state = CANDIDATE & r.t > timePeriod & get_signal( leaderSig ) > 0.1 :
+	{
+		r.state := FOLLOWER,
+	}
+	
+	r.state = CANDIDATE & candidate.txCount >= 3 : {
+	
+		r.state := LEADER	
+	}
+	
+	
+	r.state = LEADER & r.t > timePeriod : {
+	
+		emit_signal(leaderSig, 100);
+		r.t := 0;
+	}
+
+	
+	r.state = LEADER & r.t > (timePeriod - 1) & get_signal(leaderSig) > 0.1: {
+		
+		r.state := CANDIDATE,
+	}
+
+
+			
+	selected : {
+		
+		message(1, "state=" <> tostring(r.state)
+		)
+	}
+
+	true : { 
+		r.t := r.t + dt,
+		candidate.t := candidate.t + dt
+	}
+	
+
+};
+
+program p() := globalFollower(globalLeaderSignal, globalControlSignal) + 
+				leaderElection2(IDLE, cornerLeaderSignal, cornerControlSignal) sharing r, gfp;
+
+
+foreach q in range 400 do
+ 	ecoli ( [x:=0, y:=10], program p())
+end;	
+
+
+ecoli( [x:= 0, y:=0], program globalLeader(globalLeaderSignal, globalControlSignal) );
