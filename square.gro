@@ -26,44 +26,42 @@ include gro
 dt := 0.075;
 set ( "dt", dt );
 leaderSig := signal ( 1, 1 );
-controlSig := signal(1, 0.1);
+leaderSig2 := signal(1, 1);
 
+controlSig := signal(1, 0.1);
+controlSig2:= signal(1, 0.1);
 
 LEADER := 0;
 FOLLOWER := 1;
 ELECTION := 2;
 CANDIDATE := 3;
 VOTER := 4;
+IDLE := 5;
 
 
 
-timePeriod := 7;
+timePeriod := 10;
 mag := 10;
 
 
-program leaderElection(cond, leaderSignal, controlSignal) := {
+program leaderElection(initialState, leaderSignal, controlSignal) := {
 
-	r := [ state := ELECTION,  t := 0.0 ];
+	r := [ state := initialState,  t := 0.0 ];
 	candidate := [ t := 0 , txCount := 0];
-	follower := [ leaderSignalCount := 0];
-	
+	follower := [ substate := CANDIDATE, leaderSignalCount := 0];
+
 	
 	rfp := 0;
 	gfp := 0;
 	count := 0;
 
-	cond : {
-	
-		skip();
-	}
-	
 	//if follower and no signal received from
 	//leader, go into election mode to select
 	//new leader
 	
 	r.state = FOLLOWER & 
 	get_signal(leaderSig) > 0.1 & 
-	r.t > (timePeriod - 1) : {
+	r.t > timePeriod : {
 	
 		r.t := 0,
 		emit_signal ( leaderSig, 100 ),
@@ -94,12 +92,14 @@ program leaderElection(cond, leaderSignal, controlSignal) := {
 	}
 	
 	r.state = FOLLOWER & get_signal(controlSignal) > 1
-	& get_signal(controlSignal) < 2 : {
+	& get_signal(controlSignal) < 1.5 & rate(0.1) : {
 	
 		gfp := gfp - 10;
 		rfp := rfp + 10;
-		
+		follower.substate := CANDIDATE;
 	}
+	
+	
 	
 
 	//if in election mode and get signal from candidate
@@ -132,7 +132,7 @@ program leaderElection(cond, leaderSignal, controlSignal) := {
 		candidate.txCount := candidate.txCount + 1,
 	}
 	
-	r.state = CANDIDATE & r.t > timePeriod & get_signal( leaderSig ) > 0.01 :
+	r.state = CANDIDATE & r.t > timePeriod & get_signal( leaderSig ) > 0.1 :
 	{
 		r.state := FOLLOWER,
 		rfp := 0,
@@ -165,11 +165,131 @@ program leaderElection(cond, leaderSignal, controlSignal) := {
 	
 	}
 	
-	r.state = LEADER & r.t > (timePeriod - 2) & get_signal(leaderSig) > 0.1: {
+	r.state = LEADER & r.t > (timePeriod - 1) & get_signal(leaderSig) > 0.1: {
 		
 		r.state := CANDIDATE,
 		rfp := 1000;
 		gfp := 0;
+	}
+
+	
+
+	true : { 
+		r.t := r.t + dt,
+		candidate.t := candidate.t + dt
+	}
+	
+
+};
+
+
+program leaderElection2(initialState, leaderSignal, controlSignal) := {
+
+	r := [ state := initialState,  t := 0.0 ];
+	candidate := [ t := 0 , txCount := 0];
+	follower := [ substate := CANDIDATE, leaderSignalCount := 0];
+
+	count := 0;
+
+	//if follower and no signal received from
+	//leader, go into election mode to select
+	//new leader
+	
+	get_signal(controlSig) > 1 & get_signal(controlSig) < 1.5 : 
+	{
+		r.state := ELECTION;
+	}
+	
+	get_signal(leaderSig) < 1 : 
+	{
+		r.state := IDLE;
+	}
+	
+	get_signal(leaderSig) > 1.5 : 
+	{
+		r.state := IDLE;
+	}
+	
+	r.state = FOLLOWER & 
+	get_signal(leaderSig) > 0.1 & 
+	r.t > timePeriod : {
+	
+		r.t := 0,
+		emit_signal ( leaderSig, 100 ),
+		follower.leaderSignalCount := follower.leaderSignalCount + 1;
+	
+	}
+	
+	
+	r.state = FOLLOWER & r.t > 3*timePeriod : {
+		
+		r.state := ELECTION,
+		r.t := 0
+	
+	}
+	
+	
+	r.state = FOLLOWER & r.t > 2*timePeriod : {
+		
+		follower.leaderSignalCount := 0;
+	}
+	
+	
+	
+	
+
+	//if in election mode and get signal from candidate
+	//you lost :p
+	//Set yourself as the follower.
+	r.state = ELECTION & get_signal(leaderSig) > 0.1: 
+	{
+		r.state := FOLLOWER,
+	}
+
+
+	//set yourself as candidate for leader
+	r.state = ELECTION & r.t > timePeriod & rate(0.001) : { 
+		
+		emit_signal ( leaderSig, 100 ),
+		r.t := 0,
+		r.state := CANDIDATE,
+		candidate.t := 0,
+		candidate.txCount := 0,
+	}
+
+	
+	r.state = CANDIDATE & rate(0.03) : {
+	
+		emit_signal( leaderSig, 100 ),
+		r.t := 0,
+		candidate.txCount := candidate.txCount + 1,
+	}
+	
+	r.state = CANDIDATE & r.t > timePeriod & get_signal( leaderSig ) > 0.1 :
+	{
+		r.state := FOLLOWER,
+	}
+	
+	r.state = CANDIDATE & candidate.txCount >= 3 : {
+	
+		r.state := LEADER	
+	}
+	
+	just_divided & daughter : {
+	
+		r.state := FOLLOWER,
+	}
+	
+	r.state = LEADER & r.t > timePeriod : {
+	
+		emit_signal(leaderSig, 100);
+		r.t := 0;
+	}
+
+	
+	r.state = LEADER & r.t > (timePeriod - 1) & get_signal(leaderSig) > 0.1: {
+		
+		r.state := CANDIDATE,
 	}
 
 		
@@ -187,12 +307,16 @@ program leaderElection(cond, leaderSignal, controlSignal) := {
 		r.t := r.t + dt,
 		candidate.t := candidate.t + dt
 	}
+	
 
 };
 
+//program p() := leaderElection(ELECTION, leaderSig, controlSig);
+program p() := leaderElection(ELECTION, leaderSig, controlSig) + leaderElection2(IDLE, leaderSig2, controlSig2) sharing gfp, rfp;
+
 foreach q in range 1 do
 
-ecoli ( [x:=0 , y:=0], program leaderElection(true, leaderSig, controlSig) )
+ecoli ( [x:=0 , y:=0], program  p())
 
 end;
 
