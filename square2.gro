@@ -13,6 +13,14 @@ cornerControlSignal := signal(1, 0.05);
 
 cornerControlSignal2 := signal(1, 0.05);
 
+
+squareSignal := signal(1, 0.05);
+squareSignal1 := signal(1, 0.05);
+squareSignal2 := signal(1, 0.05);
+squareSignal3 := signal(1, 0.05);
+
+squareSignalMag := 30;
+
 timePeriod := 7;
 timeToStabilize := 50;
 
@@ -22,6 +30,7 @@ ELECTION := 2;
 CANDIDATE := 3;
 VOTER := 4;
 IDLE := 5;
+
 
 
 
@@ -45,7 +54,7 @@ program globalLeader(sig, controlSig) := {
 	true : {
 		
 		emit_signal(controlSig, 300);
-	
+		emit_signal(squareSignal, squareSignalMag);
 	}
 
 };
@@ -83,7 +92,53 @@ program globalFollower(sig, controlSig) := {
 		r.state := IDLE;
 		t2 := 0;
 	}
+	
+	r.state = IDLE & (get_signal(squareSignal) > get_signal(squareSignal1))
+	: {
+					 
+		rfp := 1000;
 		
+	}
+	
+	r.state = IDLE & (get_signal(squareSignal) > get_signal(squareSignal2)) : 
+	{
+		rfp := 1000;
+	}
+	
+	r.state = IDLE  & (get_signal(squareSignal) < get_signal(squareSignal1)) : {
+		
+		rfp := 0;
+	}
+		
+	r.state = IDLE  & (get_signal(squareSignal) < get_signal(squareSignal2)) : {
+		
+		rfp := 0;
+	}
+	
+	/*	
+	r.state = IDLE & (get_signal(squareSignal1) - get_signal(squareSignal)) < 2   : {
+		
+		rfp := 1000;
+	}
+	
+	r.state = IDLE & (get_signal(squareSignal1) - get_signal(squareSignal)) > 2 & 
+					(get_signal(squareSignal2) - get_signal(squareSignal)) > 2): {
+		
+		rfp := 0;
+	}
+	
+	r.state = IDLE & (get_signal(squareSignal2) - get_signal(squareSignal)) < 2 : {
+		rfp := 1000;
+	}
+	*/
+	selected : {
+	
+		message(1, "square signal = " <> tostring(get_signal(squareSignal)) <> ", "
+				  <>  " square signal 1 = " <> tostring(get_signal(squareSignal1)) <> ", "
+				  <>  " square signal 2 = " <> tostring(get_signal(squareSignal2)) <> ", "
+		)
+		
+	}
 };
 
 mag2 := 100;
@@ -103,7 +158,6 @@ program leaderElection2(initialState, leaderSig, controlSig) := {
 	//if follower and no signal received from
 	//leader, go into election mode to select
 	//new leader
-
 
 	
 	r.state = FOLLOWER & 
@@ -181,7 +235,7 @@ program leaderElection2(initialState, leaderSig, controlSig) := {
 	}
 	
 	r.state != LEADER : {
-		rfp := 0;
+		//rfp := 0;
 		leader.t := 0;
 	}
 	
@@ -209,7 +263,7 @@ program leaderElection2(initialState, leaderSig, controlSig) := {
 
 };
 
-program corners23(controlSig1, controlSig2) := {
+program corners23(controlSig1, controlSig2, squareSig) := {
 
 	needs r;
 	needs rfp;
@@ -225,16 +279,17 @@ program corners23(controlSig1, controlSig2) := {
 	get_signal(controlSig2) < 0.6 & 
 	t > timeToStabilize: {
 		
-		rfp := 1000;
-		gfp := 0;
+		//rfp := 1000;
+		//gfp := 0;
 		emit_signal(controlSig1, 300);
+		emit_signal(squareSig, squareSignalMag);
 	}
 	
 	r.state != IDLE &
 	r.state != LEADER &
 	get_signal(controlSig2) < 0.3 : {
-		rfp := 0;
-		gfp := 1000;
+		//rfp := 0;
+		//gfp := 1000;
 		t  := 0;
 	}
 	
@@ -242,8 +297,8 @@ program corners23(controlSig1, controlSig2) := {
 	r.state != LEADER &
 	get_signal(controlSig2) > 0.6 : {
 	
-		rfp := 0;
-		gfp := 1000;
+		//rfp := 0;
+		//gfp := 1000;
 		t := 0;
 	}
 	
@@ -251,7 +306,7 @@ program corners23(controlSig1, controlSig2) := {
 
 
 
-program corner5(controlSig1, controlSig2) := {
+program corner5(controlSig1, controlSig2, squareSig) := {
 
 	needs r;
 	needs rfp;
@@ -266,16 +321,17 @@ program corner5(controlSig1, controlSig2) := {
 	get_signal(controlSig2) > 3.0 & 
 	get_signal(controlSig2) < 4.5 : {
 		
-		rfp := 1000;
-		gfp := 0;
+		//rfp := 1000;
+		//gfp := 0;
 		//emit_signal(controlSig1, 300);
+		emit_signal(squareSig, squareSignalMag);
 	}
 	
 	r.state != IDLE &
 	r.state != LEADER &
 	get_signal(controlSig2) < 3.0 : {
-		rfp := 0;
-		gfp := 1000;
+		//rfp := 0;
+		//gfp := 1000;
 		t  := 0;
 	}
 	
@@ -283,8 +339,8 @@ program corner5(controlSig1, controlSig2) := {
 	r.state != LEADER &
 	get_signal(controlSig2) > 4.5 : {
 	
-		rfp := 0;
-		gfp := 1000;
+		//rfp := 0;
+		//gfp := 1000;
 		t := 0;
 	}
 	
@@ -300,9 +356,9 @@ program corner5(controlSig1, controlSig2) := {
 program p() := globalFollower(globalLeaderSignal, globalControlSignal) + 
 				leaderElection2(IDLE, cornerLeaderSignal, cornerControlSignal) sharing r, gfp, rfp;
 
-program q() := p() + corners23(cornerControlSignal2, cornerControlSignal) sharing r, gfp, rfp;
+program q() := p() + corners23(cornerControlSignal2, cornerControlSignal, squareSignal1) sharing r, gfp, rfp;
 
-program r() := q() + corner5(cornerControlSignal2, cornerControlSignal2) sharing r, gfp, rfp;
+program r() := q() + corner5(cornerControlSignal2, cornerControlSignal2, squareSignal2) sharing r, gfp, rfp;
 
 
 foreach q in range 400 do
