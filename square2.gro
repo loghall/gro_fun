@@ -1,5 +1,3 @@
-
-
 include gro
 
 set("dt", 0.1);
@@ -54,7 +52,7 @@ program globalLeader(sig, controlSig) := {
 	true : {
 		
 		emit_signal(controlSig, 300);
-		emit_signal(squareSignal, squareSignalMag);
+		emit_signal(squareSignal, 400);
 	}
 
 };
@@ -92,6 +90,7 @@ program globalFollower(sig, controlSig) := {
 		r.state := IDLE;
 		t2 := 0;
 	}
+	
 	
 	r.state = IDLE & (get_signal(squareSignal) > get_signal(squareSignal1))
 	: {
@@ -344,12 +343,6 @@ program corner5(controlSig1, controlSig2, squareSig) := {
 		t := 0;
 	}
 	
-				
-	selected : {
-		
-		message(1, "signal=" <> tostring(get_signal(controlSig2)));
-		
-	}
 	
 };
 
