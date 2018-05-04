@@ -193,7 +193,7 @@ program leaderElection2(initialState, leaderSig, controlSig) := {
 
 
 	//set yourself as candidate for leader
-	r.state = ELECTION & r.t > timePeriod & rate(0.1) : { 
+	r.state = ELECTION & r.t > timePeriod & rate(0.003) : { 
 		
 		emit_signal ( leaderSig, mag2 ),
 		r.t := 0,
@@ -203,11 +203,14 @@ program leaderElection2(initialState, leaderSig, controlSig) := {
 	}
 
 	
-	r.state = CANDIDATE & rate(0.03) : {
+	r.state = CANDIDATE & rate(0.5) : {
 	
 		emit_signal( leaderSig, mag2 ),
 		r.t := 0,
 		candidate.txCount := candidate.txCount + 1,
+		message(1, "square signal = " <> tostring(candidate.txCount) <> ", "
+		)
+		
 	}
 	
 	r.state = CANDIDATE & r.t > timePeriod & get_signal( leaderSig ) > 0.1 :
@@ -216,7 +219,8 @@ program leaderElection2(initialState, leaderSig, controlSig) := {
 	}
 	
 	r.state = CANDIDATE & candidate.txCount >= 3 : {
-	
+		message(1, "am a leader, "
+		),
 		r.state := LEADER	
 	}
 	
@@ -247,7 +251,8 @@ program leaderElection2(initialState, leaderSig, controlSig) := {
 	
 	
 	r.state = LEADER & r.t > (timePeriod - 1) & get_signal(leaderSig) > 0.1: {
-		
+		message(1, "am a candidate, "
+		),
 		r.state := CANDIDATE,
 	}
 
